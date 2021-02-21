@@ -64,7 +64,7 @@ class TreeviewMenu(ttk.Treeview):
     def create_parameter_list(self):
         for the_parent, the_child, the_value, dummy_value, *the_expansion in self.lines_list:
             self.insert(the_parent, 'end', the_child, text=the_child, values=the_value)
-            self.item(the_child, open=bool(the_expansion))
+            self.item(the_child, open=bool(the_expansion[0]))
         self.selection_set(self.lines_list[0][1])
         self.focus_set()
         self.focus(self.lines_list[0][1])
