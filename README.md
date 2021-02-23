@@ -9,7 +9,7 @@ Treeview based menu, calls popup to allows user to send input.
 Keyword argument:
    lines_parameters -- define all parameters in the menu. It except a list of tuples.
         each tuples should be five object long : 1st, string, parent ("", for the root). 2nd, string, name of
-         the parameter (should be unique). 3rd, string, default value. 4th, parameter type,
+         the parameter (should be unique). 3rd, list of string, default value. 4th, parameter type,
         5th initial view, True: expand children.
         details on the 4th parameter, if:
             bool() : will toggle value between True and False
