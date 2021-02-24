@@ -1,7 +1,7 @@
 import tkinter as tk
 import tkinter.ttk as ttk
 import copy
-
+import os
 
 class TreeviewMenu(ttk.Treeview):
     """Treeview based menu, calls popup to allows user to send input.
@@ -28,7 +28,7 @@ class TreeviewMenu(ttk.Treeview):
     width_value -- set the width of all other columns (integer)
 
     Public attribute:
-    columns_list: store the columns of the treeview
+    columns_tuple: store the columns of the treeview in a tuple
     lines_list: store lines_parameters
     popup_window: store the popup (tk.Toplevel), (destroyed when validated)
     callback_at_validation: function called after a parameter is set or validated
@@ -47,10 +47,10 @@ class TreeviewMenu(ttk.Treeview):
         kwargstreeview = copy.deepcopy(kwargs)  # create a copy to build the dictionary for the treeview structure
         kwargstreeview.pop("lines_parameters")
         super(TreeviewMenu, self).__init__(master, **kwargstreeview)  # initialize a treeview widget
-        self.columns_list = ("#0",)+kwargs["columns"]  # create a list to store columns
+        self.columns_tuple = ("#0",)+kwargs["columns"]  # create a tuple to store columns
         self.lines_list = kwargs["lines_parameters"]  # store the list describing the treeview menu
         # create the menu
-        for name_column in self.columns_list:  # initialize columns header
+        for name_column in self.columns_tuple:  # initialize columns header
             if name_column == "#0":
                 self.column(name_column, width=width_parameter, minwidth=50, stretch=False)
                 self.heading(name_column, text="Parameter", anchor="w")
@@ -70,7 +70,7 @@ class TreeviewMenu(ttk.Treeview):
             if isinstance(the_value, type(list())):
                 self.item(the_child, values=the_value)
             else:
-                self.item(the_child, values=(the_value,))
+                self.item(the_child, values=[the_value])
             self.item(the_child, open=bool(the_expansion[0]))
         self.selection_set(self.lines_list[0][1])
         self.focus_set()
@@ -84,11 +84,11 @@ class TreeviewMenu(ttk.Treeview):
         """update the value stored in the self.lines_list descriptor if position=1,
         if position=2 change the type of the parameter
         tip: can be used to update the list to be displayed in the combox popup"""
-        for i in range(len(self.lines_list)):
-            if self.lines_list[i][1] == parameter and position == 1:
-                self.lines_list[i] = self.lines_list[i][0:2] + (values,) + self.lines_list[i][3:]
-            elif self.lines_list[i][1] == parameter and position == 2:
-                self.lines_list[i] = self.lines_list[i][0:3]+(values,) + (self.lines_list[i][4],)
+        for i, element in enumerate(self.lines_list):
+            if element[1] == parameter and position == 1:
+                self.lines_list[i] = element[0:2] + (values,) + element[3:]
+            elif element[1] == parameter and position == 2:
+                self.lines_list[i] = element[0:3]+(values,) + (element[4],)
 
     def do_popup(self, event):
         """assess which input has been selected and call the right method depending on the input"""
@@ -148,8 +148,9 @@ class TreeviewMenu(ttk.Treeview):
         self.popup_window.title(str(self.focus())+': double press "Del" to validate')
         self.popup_widget = tk.Text(self.popup_window, height=2, width=50)
         if text_initialization is None:
-            if len(self.item(current_item)['values']):
-                self.popup_widget.insert(1.0, str(self.item(current_item)['values'][0]))
+            for i in range(len(self.item(current_item)['values'])):
+                self.popup_widget.insert('end', str(self.item(current_item)['values'][i])+ '\n')
+            self.popup_widget.delete('end-1c')
         else:
             self.popup_widget.insert(1.0, str(text_initialization))
         self.popup_widget.pack()
@@ -163,11 +164,11 @@ class TreeviewMenu(ttk.Treeview):
     def change_state(self, current_item):
         """toggle the state of the item in focus"""
         if self.item(current_item)['values'][0] == 'False':
-            self.item(current_item, values=['True'])
-            self.update_lines_list(current_item, 'True')
+            temporary = 'True'
         else:
-            self.item(current_item, values=['False'])
-            self.update_lines_list(current_item, 'False')
+            temporary = 'False'
+        self.item(current_item, values=[temporary])
+        self.update_lines_list(current_item, [temporary])
         self.callback_at_validation()
 
     def display_combobox_popup(self, current_item, list_combo=None):
@@ -218,42 +219,73 @@ class TreeviewMenu(ttk.Treeview):
         self.update_lines_list(parameter, result)
         self.callback_at_validation()
 
+    def update_from_file(self, file_path: str):
+        try:
+            with open(file_path, 'r') as f:
+                text = f.read()
+            text = text.split("\n")
+            text = [a.split('\t') for a in text]
+            for parameter_new, *component_new in text:
+                for _, parameter_old, *component_old in self.lines_list:
+                    if parameter_new == parameter_old:
+                        self.item(parameter_old, values=component_new)
+                        self.update_lines_list(parameter_old, component_new)
+            return self.lines_list
+        except FileNotFoundError:
+            print('cannot open', file_path)
+            return None
+
+    def write_to_place(self, file_path: str):
+        if len(file_path.split('/')) > 1:
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, 'w') as f:
+            value = ['\t'.join([param, '\t'.join(ele)]) if isinstance(ele,list) else param + '\t' + ele
+                     for __, param, ele, *__ in self.lines_list]
+            value = '\n'.join(value)
+            f.write(value)
+
 
 if __name__ == '__main__':
-    # exemple
-
+    # example, firt create your tk application
     main_window = tk.Tk()
     main_window.title("Fenêtre Menu")
+    # creat a button to close the application
     bt_quit = tk.Button(main_window, text="Quitter", command=main_window.destroy)
     bt_quit.bind("<KeyPress-Return>", lambda arg: main_window.destroy())
-    tv_menu = TreeviewMenu(main_window, width_value=200)
 
+    # create a TreeviewMenu object
+    tv_menu = TreeviewMenu(main_window, columns=("values1", "values2"))
+
+    #create a list containing the description of the menu
     lines_parameters1 = [("", "param0", "1", ["a", "c", "g", "d"], True),
                          ("param0", "param1", "2", bool(), True),
                          ("param1", "param2", "3", "Text", True),
                          ("", "param3", "4", bool(), True),
                          ("param1", "param5", "3", "Text", True), ]
 
+    # example of a function which will delete a parameter
     def function_called_when_param4_clicked(treeviewmenu_in):
         def function_executed_after_validation(treeviewmenu=treeviewmenu_in):
             print('I''m changing the list')
             treeviewmenu.lines_list = lines_parameters1  # set the list to generate the treeview
             treeviewmenu.clear_parameter_list()  # clear the treeview
             treeviewmenu.create_parameter_list()  # generate the treeview
-            treeviewmenu.callback_at_validation = lambda: None  # reset the function exectued
+            treeviewmenu.callback_at_validation = lambda: None  # reset the function
         return function_executed_after_validation
 
     def fonction_to_be_called_param4(arg1=tv_menu):
         return function_called_when_param4_clicked(arg1)
 
-    lines_parameters0 = [("", "param0", "1", ["a", "c", "g", "d"], True),
+    #create a list containing the description of the menu
+    lines_parameters0 = [("", "param0", ["1","2"], ["a", "c", "g", "d"], True),
                          ("param0", "param1", "2", bool(), True),
-                         ("param1", "param2", "3", "Text", True),
+                         ("param1", "param2", ["1","2"], "Text", True),
                          ("", "param3", "4", bool(), True),
                          ("param1", "param5", ("one", "two"), "Text", True),
                          ("", "param4", "let it go", fonction_to_be_called_param4, True), ]
-    tv_menu.lines_list = lines_parameters0
-    tv_menu.create_parameter_list()
+
+    tv_menu.lines_list = lines_parameters0  # set the description
+    tv_menu.create_parameter_list()  # load the description
     tv_menu.pack()
     bt_quit.pack()
     main_window.mainloop()
